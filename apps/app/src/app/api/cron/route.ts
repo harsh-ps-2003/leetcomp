@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { run } from "@v1/leetcomp";
+import { run } from "@v1/leetoffer";
 
 export async function GET(request: Request) {
   // Simple security: check for a secret token in the request

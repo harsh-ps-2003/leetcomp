@@ -60,7 +60,7 @@ v1/
 │   │       └── parsed_comps.json # Generated compensation data
 │   └── web/              # Marketing website
 ├── packages/
-│   ├── leetcomp/        # LeetCode data ingestion package
+│   ├── leetoffer/        # LeetCode data ingestion package
 │   │   ├── src/
 │   │   │   ├── index.ts      # Main entry point
 │   │   │   ├── refresh.ts    # Fetch LeetCode posts
@@ -139,7 +139,7 @@ v1/
 To manually fetch and parse LeetCode compensation data:
 
 ```bash
-cd packages/leetcomp
+cd packages/leetoffer
 bun run build
 node dist/index.js
 ```
@@ -149,7 +149,7 @@ This will:
 1. Fetch posts from LeetCode's compensation discussion forum
 2. Parse each post using Gemini AI
 3. Save structured data to `apps/app/public/parsed_comps.json`
-4. Track metadata in `apps/app/public/.leetcomp_metadata.json`
+4. Track metadata in `apps/app/public/.leetoffer_metadata.json`
 
 ### Automated Cron Job
 
@@ -227,7 +227,7 @@ bun run clean:workspaces # Clean all workspace build artifacts
 ### LeetCode Package
 
 ```bash
-cd packages/leetcomp
+cd packages/leetoffer
 
 bun run build            # Build the package
 bun run dev              # Watch mode
@@ -457,7 +457,7 @@ This usually means:
 
 **Solution**:
 
-- Manually run the ingestion: `cd packages/leetcomp && bun run build && node dist/index.js`
+- Manually run the ingestion: `cd packages/leetoffer && bun run build && node dist/index.js`
 - Check the cron endpoint logs
 - Verify `GEMINI_API_KEY` is set correctly
 
