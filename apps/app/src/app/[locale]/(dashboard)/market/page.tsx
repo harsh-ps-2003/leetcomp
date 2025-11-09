@@ -1,4 +1,4 @@
-import { readFile } from "fs/promises";
+import { readFile } from "node:fs/promises";
 import { join } from "path";
 import { MarketClient } from "./market-client";
 import { AnimatedText } from "@v1/ui/animated-text";
@@ -49,11 +49,11 @@ export default async function MarketPage() {
       <div className="pointer-events-none absolute -top-[118px] inset-x-0 h-[80%] bg-[linear-gradient(to_right,#222_1px,transparent_1px),linear-gradient(to_bottom,#222_1px,transparent_1px)] bg-[size:4.5rem_2rem] -z-10 [transform:perspective(1000px)_rotateX(-63deg)]" />
       <div className="pointer-events-none absolute inset-x-0 top-0 h-full bg-gradient-to-t from-background to-transparent -z-10" />
 
-      <div className="relative z-10 mx-auto flex w-full max-w-6xl flex-col items-center gap-10 px-4 pb-24 pt-32">
-        <h1 className="font-departure text-center text-[80px] md:text-[140px] lg:text-[160px] leading-tight">
+      <div className="relative z-10 mx-auto flex w-full max-w-6xl flex-col items-center gap-6 px-4 pb-12 pt-16">
+        <h1 className="font-departure text-center text-4xl md:text-5xl lg:text-6xl leading-tight">
           <AnimatedText text="Job Market" />
         </h1>
-        <p className="text-center text-2xl md:text-3xl lg:text-4xl text-muted-foreground/80">
+        <p className="text-center text-base md:text-lg lg:text-xl text-muted-foreground/80">
           Browse {data.length} compensation offers
         </p>
 
@@ -75,7 +75,7 @@ export default async function MarketPage() {
                     alt="LeetCode"
                     className="h-5 w-5 md:h-6 md:w-6 object-contain"
                   />
-                  <span className="text-lg md:text-xl lg:text-2xl">
+                  <span className="text-sm md:text-base">
                     Live from LeetCode
                   </span>
                 </div>

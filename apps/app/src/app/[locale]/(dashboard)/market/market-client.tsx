@@ -141,7 +141,7 @@ export function MarketClient({ initialData }: MarketClientProps) {
           placeholder="Search by company, role, or location..."
           value={searchTerm}
           onChange={(event) => setSearchTerm(event.target.value)}
-          className="max-w-2xl w-full bg-background border-border text-lg md:text-xl py-6 px-4 mx-auto"
+          className="max-w-2xl w-full bg-background border-border text-base py-3 px-3 mx-auto"
         />
 
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-6">
@@ -222,7 +222,7 @@ export function MarketClient({ initialData }: MarketClientProps) {
 
       <div className="rounded-xl border border-border/60 bg-background/40 backdrop-blur-sm p-4 md:p-6">
         {pageOffers.length === 0 ? (
-          <p className="text-center text-muted-foreground py-12 text-xl md:text-2xl">
+          <p className="text-center text-muted-foreground py-8 text-base md:text-lg">
             No offers found. Try adjusting your search or filters.
           </p>
         ) : (
@@ -235,7 +235,7 @@ export function MarketClient({ initialData }: MarketClientProps) {
                 >
                   <div className="flex justify-between items-start">
                     <div>
-                      <h3 className="font-semibold text-lg">
+                      <h3 className="font-semibold text-base">
                         {offer.company || "Unknown Company"}
                       </h3>
                       {offer.location && (
@@ -245,7 +245,7 @@ export function MarketClient({ initialData }: MarketClientProps) {
                       )}
                     </div>
                     {offer.total_offer && (
-                      <span className="text-lg font-semibold text-green-500">
+                      <span className="text-base font-semibold text-green-500">
                         ₹
                         {(offer.total_offer / 100000).toLocaleString(
                           undefined,
