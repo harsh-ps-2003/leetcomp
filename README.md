@@ -25,7 +25,7 @@ A platform for navigating the job market using compensation data from LeetCode d
   - Uses AI (Gemini 2.5 Flash) to parse unstructured data
   - Incremental updates (only fetches new posts)
   - Rate limiting and quota management
-  - Automatic cron job scheduling (Vercel)
+  - Automatic daily cron job scheduling (Vercel - runs once per day at midnight UTC)
 
 - 📈 **Data Visualization**:
   - Interactive charts using Recharts
@@ -46,7 +46,7 @@ A platform for navigating the job market using compensation data from LeetCode d
 
 ## Project Structure
 
-```
+```text
 v1/
 ├── apps/
 │   ├── app/              # Next.js application (main app)
@@ -284,17 +284,146 @@ interface ParsedOffer {
 
 ## Deployment
 
-### Vercel
+### Vercel (Recommended)
 
-1. **Connect your repository** to Vercel
-2. **Set environment variables** in Vercel dashboard:
-   - `GEMINI_API_KEY`
-   - `CRON_SECRET` (optional, for cron endpoint security)
-3. **Deploy**: Vercel will automatically deploy on push
+Vercel has built-in support for Turborepo monorepos. Follow these steps:
 
-The cron job will run automatically every 12 hours.
+#### 1. Connect Your Repository
+
+1. Go to [vercel.com](https://vercel.com) and sign in
+2. Click **"Add New Project"**
+3. Import your Git repository
+4. Vercel will auto-detect it's a monorepo
+
+#### 2. Configure Project Settings
+
+In the Vercel project settings:
+
+**Root Directory**: Leave as root (`/`)
+
+**Framework Preset**: Next.js (auto-detected)
+
+**Build Command**: Leave empty or set to:
+
+```bash
+bun run build --filter=@v1/app
+```
+
+**Output Directory**: Leave empty (Vercel auto-detects) or set to:
+
+```text
+apps/app/.next
+```
+
+**Install Command**: Leave empty (defaults to `bun install`) or set to:
+
+```bash
+bun install
+```
+
+**Note**: Vercel should auto-detect Turborepo and configure these settings automatically. You may not need to change anything.
+
+#### 3. Set Environment Variables
+
+In the Vercel project settings, add these environment variables:
+
+**Required**:
+
+- `GEMINI_API_KEY` - Your Google Gemini API key
+
+**Optional**:
+
+- `CRON_SECRET` - Secret token for securing the cron endpoint (recommended for production)
+- `VERCEL_URL` - Automatically set by Vercel (don't override)
+
+**For Turborepo** (if needed):
+
+- `TURBO_TOKEN` - If using Vercel Remote Caching (optional)
+- `TURBO_TEAM` - Your Turborepo team name (optional)
+
+#### 4. Verify Vercel Configuration
+
+The `vercel.json` file in the root directory configures the cron job:
+
+```json
+{
+  "crons": [
+    {
+      "path": "/api/cron",
+      "schedule": "0 0 * * *"
+    }
+  ]
+}
+```
+
+This will automatically set up a cron job that runs **once per day at midnight UTC** to refresh the compensation data.
+
+**Note**:
+
+- Vercel Hobby (free) plan allows **one cron job per day**
+- The cron job runs at `00:00 UTC` daily
+- Vercel will auto-detect your Turborepo monorepo and configure the build settings
+- The `vercel.json` is primarily for cron job configuration
+
+#### 5. Deploy
+
+1. Click **"Deploy"**
+2. Vercel will:
+   - Install dependencies
+   - Build the `@v1/app` package
+   - Deploy to production
+   - Set up the cron job automatically
+
+#### 6. Verify Deployment
+
+- **App URL**: `https://your-project.vercel.app`
+- **Dashboard**: `https://your-project.vercel.app/en/dashboard`
+- **Market**: `https://your-project.vercel.app/en/market`
+- **Cron Endpoint**: `https://your-project.vercel.app/api/cron`
+
+#### 7. Test Cron Job
+
+After deployment, test the cron endpoint:
+
+```bash
+# Without authentication (if CRON_SECRET not set)
+curl https://your-project.vercel.app/api/cron
+
+# With authentication (if CRON_SECRET is set)
+curl -H "Authorization: Bearer YOUR_CRON_SECRET" \
+  https://your-project.vercel.app/api/cron
+```
+
+The cron job will run automatically **once per day at midnight UTC**. You can also trigger it manually via the endpoint.
+
+#### Troubleshooting Vercel Deployment
+
+**Build fails with "Cannot find module"**:
+
+- Ensure `bun install` runs at the root (not in `apps/app`)
+- Check that workspace dependencies are properly linked
+
+**Cron job not running**:
+
+- Verify `vercel.json` is in the root directory
+- Check Vercel dashboard → Settings → Cron Jobs
+- Ensure the `/api/cron` route exists and is accessible
+
+**Environment variables not working**:
+
+- Make sure variables are set in Vercel dashboard (not just `.env` file)
+- Redeploy after adding new environment variables
+- Check variable names match exactly (case-sensitive)
+
+**Monorepo build issues**:
+
+- Use the build command: `cd ../.. && bun run build --filter=@v1/app`
+- Ensure `packageManager` is set to `bun@1.1.26` in root `package.json`
+- Vercel should auto-detect Turborepo, but you can explicitly set it
 
 ### Manual Deployment
+
+For other platforms or self-hosting:
 
 ```bash
 # Build
@@ -303,6 +432,8 @@ bun run build
 # Start production server
 bun run start:app
 ```
+
+The app will be available at `http://localhost:3000` (or your configured PORT).
 
 ## Troubleshooting
 
