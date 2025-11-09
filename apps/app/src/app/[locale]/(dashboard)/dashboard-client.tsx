@@ -61,7 +61,7 @@ function calculateStats(values: number[]) {
 // Custom Box Plot Shape Component
 function BoxPlotShape(props: any) {
   const { x, y, width, payload } = props;
-  if (!payload) return null;
+  if (!payload) return <g />;
 
   const { min, q1, median, q3, max } = payload;
   const boxWidth = width * 0.6;
@@ -152,8 +152,9 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
       .filter((ts): ts is number => ts !== undefined)
       .sort((a, b) => b - a);
 
-    const newestDate = dates[0]
-      ? new Date(dates[0]).toISOString().split("T")[0]
+    const firstDate = dates[0];
+    const newestDate = firstDate !== undefined
+      ? new Date(firstDate).toISOString().split("T")[0]
       : null;
     const lastDate = dates[dates.length - 1];
     const oldestDate = lastDate !== undefined
