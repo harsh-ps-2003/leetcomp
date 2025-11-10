@@ -53,7 +53,13 @@ function getOutputPaths() {
   let outputPath: string;
   let metadataPath: string;
 
-  if (cwd.endsWith("apps/app")) {
+  // In Vercel, use /tmp (writable) instead of public folder (read-only)
+  const isVercel = !!process.env.VERCEL;
+
+  if (isVercel) {
+    outputPath = "/tmp/parsed_comps.json";
+    metadataPath = "/tmp/.leetoffer_metadata.json";
+  } else if (cwd.endsWith("apps/app")) {
     outputPath = join(cwd, "public", "parsed_comps.json");
     metadataPath = join(cwd, "public", ".leetoffer_metadata.json");
   } else {
@@ -81,19 +87,56 @@ async function loadExistingData(): Promise<{
   let lastPostId: string | undefined;
   let lastFetchTime: number | undefined;
 
-  // Load existing offers
-  if (existsSync(outputPath)) {
+  // Try loading from Gist first (if configured)
+  if (process.env.GIST_ID && process.env.GITHUB_TOKEN) {
     try {
-      const fileContents = await readFile(outputPath, "utf-8");
-      existingOffers = JSON.parse(fileContents);
-      console.log(`Loaded ${existingOffers.length} existing offers`);
+      const response = await fetch(
+        `https://api.github.com/gists/${process.env.GIST_ID}`,
+        {
+          headers: {
+            Authorization: `token ${process.env.GITHUB_TOKEN}`,
+            Accept: "application/vnd.github.v3+json",
+          },
+        },
+      );
+
+      if (response.ok) {
+        const gist = await response.json();
+        const file = gist.files["parsed_comps.json"];
+        if (file) {
+          existingOffers = JSON.parse(file.content);
+          console.log(`Loaded ${existingOffers.length} existing offers from Gist`);
+        }
+
+        // Try to load metadata from Gist too
+        const metadataFile = gist.files[".leetoffer_metadata.json"];
+        if (metadataFile) {
+          const metadata = JSON.parse(metadataFile.content);
+          lastPostId = metadata.lastPostId;
+          lastFetchTime = metadata.lastFetchTime;
+          console.log(`Incremental mode: Last post ID was ${lastPostId}`);
+        }
+      }
     } catch (error) {
-      console.warn("Failed to load existing offers, starting fresh:", error);
+      console.warn("Failed to load from Gist, trying local file:", error);
     }
   }
 
-  // Load metadata (last post ID and fetch time)
-  if (existsSync(metadataPath)) {
+  // Fallback to local file if Gist didn't work or isn't configured
+  if (existingOffers.length === 0) {
+    if (existsSync(outputPath)) {
+      try {
+        const fileContents = await readFile(outputPath, "utf-8");
+        existingOffers = JSON.parse(fileContents);
+        console.log(`Loaded ${existingOffers.length} existing offers from local file`);
+      } catch (error) {
+        console.warn("Failed to load existing offers, starting fresh:", error);
+      }
+    }
+  }
+
+  // Load metadata from local file if not already loaded from Gist
+  if (!lastPostId && existsSync(metadataPath)) {
     try {
       const metadataContents = await readFile(metadataPath, "utf-8");
       const metadata = JSON.parse(metadataContents);
@@ -247,29 +290,72 @@ export async function run(): Promise<{
 
   const { outputPath, metadataPath } = getOutputPaths();
 
-  // Ensure the directory exists
-  const outputDir = join(outputPath, "..");
-  if (!existsSync(outputDir)) {
-    throw new Error(`Output directory does not exist: ${outputDir}`);
+  // Ensure the directory exists (skip check for /tmp in Vercel)
+  if (!outputPath.startsWith("/tmp")) {
+    const outputDir = join(outputPath, "..");
+    if (!existsSync(outputDir)) {
+      throw new Error(`Output directory does not exist: ${outputDir}`);
+    }
   }
 
-  // Save offers
+  // Save offers to local file
   await writeFile(outputPath, JSON.stringify(allOffers, null, 2));
 
-  // Save metadata (last post ID and fetch time)
-  if (lastFetchedPostId) {
-    await writeFile(
-      metadataPath,
-      JSON.stringify(
-        {
-          lastPostId: lastFetchedPostId,
-          lastFetchTime: Date.now(),
-          totalOffers: allOffers.length,
+  // Also save to Gist if configured
+  if (process.env.GIST_ID && process.env.GITHUB_TOKEN) {
+    try {
+      await fetch(`https://api.github.com/gists/${process.env.GIST_ID}`, {
+        method: "PATCH",
+        headers: {
+          Authorization: `token ${process.env.GITHUB_TOKEN}`,
+          Accept: "application/vnd.github.v3+json",
+          "Content-Type": "application/json",
         },
-        null,
-        2,
-      ),
-    );
+        body: JSON.stringify({
+          files: {
+            "parsed_comps.json": {
+              content: JSON.stringify(allOffers, null, 2),
+            },
+          },
+        }),
+      });
+      console.log("Data saved to GitHub Gist");
+    } catch (error) {
+      console.warn("Failed to save to Gist (non-fatal):", error);
+    }
+  }
+
+  // Save metadata (last post ID and fetch time) to local file
+  if (lastFetchedPostId) {
+    const metadata = {
+      lastPostId: lastFetchedPostId,
+      lastFetchTime: Date.now(),
+      totalOffers: allOffers.length,
+    };
+    await writeFile(metadataPath, JSON.stringify(metadata, null, 2));
+
+    // Also save metadata to Gist if configured
+    if (process.env.GIST_ID && process.env.GITHUB_TOKEN) {
+      try {
+        await fetch(`https://api.github.com/gists/${process.env.GIST_ID}`, {
+          method: "PATCH",
+          headers: {
+            Authorization: `token ${process.env.GITHUB_TOKEN}`,
+            Accept: "application/vnd.github.v3+json",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            files: {
+              ".leetoffer_metadata.json": {
+                content: JSON.stringify(metadata, null, 2),
+              },
+            },
+          }),
+        });
+      } catch (error) {
+        console.warn("Failed to save metadata to Gist (non-fatal):", error);
+      }
+    }
   }
 
   console.log(`\n✅ Done!`);

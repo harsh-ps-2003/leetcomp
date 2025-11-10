@@ -61,5 +61,5 @@ tailwind.css
 .trigger
 
 # LeetCode compensation data (generated)
-apps/app/public/parsed_comps.json
+# Note: parsed_comps.json is committed with empty array, will be populated by cron job
 apps/app/public/.leetoffer_metadata.json

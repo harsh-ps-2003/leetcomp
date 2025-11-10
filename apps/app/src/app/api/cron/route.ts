@@ -19,6 +19,9 @@ export async function GET(request: Request) {
       newOffers: number;
       outputPath: string;
     } | undefined;
+
+    // Note: Data is already saved to Gist by the leetoffer package if GIST_ID and GITHUB_TOKEN are set
+
     return NextResponse.json({
       success: true,
       message: "Data refreshed successfully",
