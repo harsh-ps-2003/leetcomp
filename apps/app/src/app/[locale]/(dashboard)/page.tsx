@@ -31,7 +31,19 @@ interface ParsedOffer {
 }
 
 async function getCompensationData(): Promise<ParsedOffer[]> {
-  // Try reading from Gist first (if configured), then fallback to local file
+  // Read from committed local file first
+  try {
+    const filePath = join(process.cwd(), "public", "parsed_comps.json");
+    const fileContents = await readFile(filePath, "utf-8");
+    const data = JSON.parse(fileContents);
+    if (data.length > 0) {
+      return data;
+    }
+  } catch (error) {
+    console.error("Error reading local file:", error);
+  }
+
+  // Fallback to Gist if local file is empty or doesn't exist
   if (process.env.GIST_ID) {
     try {
       const { readFromGist } = await import("@/lib/gist-storage");
@@ -40,19 +52,11 @@ async function getCompensationData(): Promise<ParsedOffer[]> {
         return data;
       }
     } catch (error) {
-      console.error("Error reading from Gist, falling back to local file:", error);
+      console.error("Error reading from Gist:", error);
     }
   }
 
-  // Fallback to local file
-  try {
-    const filePath = join(process.cwd(), "public", "parsed_comps.json");
-    const fileContents = await readFile(filePath, "utf-8");
-    return JSON.parse(fileContents);
-  } catch (error) {
-    console.error("Error reading compensation data:", error);
-    return [];
-  }
+  return [];
 }
 
 export default async function DashboardPage() {

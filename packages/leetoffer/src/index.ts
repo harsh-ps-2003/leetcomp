@@ -31,8 +31,8 @@ if (envPath) {
 
 import { getLatestPosts } from "./refresh";
 import { parsePost } from "./parse";
-import { writeFile, readFile } from "fs/promises";
-import { join } from "path";
+import { writeFile, readFile, mkdir } from "fs/promises";
+import { join, dirname } from "path";
 
 interface ParsedOffer {
   company: string | null;
@@ -62,7 +62,12 @@ function getOutputPaths() {
   } else if (cwd.endsWith("apps/app")) {
     outputPath = join(cwd, "public", "parsed_comps.json");
     metadataPath = join(cwd, "public", ".leetoffer_metadata.json");
+  } else if (cwd.includes("packages/leetoffer")) {
+    // Running from packages/leetoffer - go up to root, then into apps/app/public
+    outputPath = join(cwd, "..", "..", "apps", "app", "public", "parsed_comps.json");
+    metadataPath = join(cwd, "..", "..", "apps", "app", "public", ".leetoffer_metadata.json");
   } else {
+    // Running from root or other location
     outputPath = join(cwd, "apps", "app", "public", "parsed_comps.json");
     metadataPath = join(
       cwd,
@@ -87,17 +92,33 @@ async function loadExistingData(): Promise<{
   let lastPostId: string | undefined;
   let lastFetchTime: number | undefined;
 
-  // Try loading from Gist first (if configured)
-  if (process.env.GIST_ID && process.env.GITHUB_TOKEN) {
+  // Load from local file first (committed file)
+  if (existsSync(outputPath)) {
     try {
+      const fileContents = await readFile(outputPath, "utf-8");
+      existingOffers = JSON.parse(fileContents);
+      console.log(`Loaded ${existingOffers.length} existing offers from local file`);
+    } catch (error) {
+      console.warn("Failed to load existing offers from local file:", error);
+    }
+  }
+
+  // Fallback to Gist if local file is empty or doesn't exist
+  if (existingOffers.length === 0 && process.env.GIST_ID) {
+    try {
+      // Try API first (works for both public and private with token)
+      const headers: HeadersInit = {
+        Accept: "application/vnd.github.v3+json",
+      };
+      
+      // Add auth if token is provided (for private gists)
+      if (process.env.GITHUB_TOKEN) {
+        headers.Authorization = `token ${process.env.GITHUB_TOKEN}`;
+      }
+
       const response = await fetch(
         `https://api.github.com/gists/${process.env.GIST_ID}`,
-        {
-          headers: {
-            Authorization: `token ${process.env.GITHUB_TOKEN}`,
-            Accept: "application/vnd.github.v3+json",
-          },
-        },
+        { headers },
       );
 
       if (response.ok) {
@@ -116,22 +137,11 @@ async function loadExistingData(): Promise<{
           lastFetchTime = metadata.lastFetchTime;
           console.log(`Incremental mode: Last post ID was ${lastPostId}`);
         }
+      } else {
+        console.warn(`Failed to load from Gist API: ${response.status}`);
       }
     } catch (error) {
-      console.warn("Failed to load from Gist, trying local file:", error);
-    }
-  }
-
-  // Fallback to local file if Gist didn't work or isn't configured
-  if (existingOffers.length === 0) {
-    if (existsSync(outputPath)) {
-      try {
-        const fileContents = await readFile(outputPath, "utf-8");
-        existingOffers = JSON.parse(fileContents);
-        console.log(`Loaded ${existingOffers.length} existing offers from local file`);
-      } catch (error) {
-        console.warn("Failed to load existing offers, starting fresh:", error);
-      }
+      console.warn("Failed to load from Gist:", error);
     }
   }
 
@@ -263,15 +273,18 @@ export async function run(): Promise<{
         console.warn(`  ⚠️  Error processing post, continuing...`);
       }
     }
-  } catch (error: any) {
-    if (error.message === "QUOTA_EXCEEDED") {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    if (errorMessage === "QUOTA_EXCEEDED") {
       console.warn(`\n⚠️  Quota exceeded during processing.`);
     } else {
-      throw error;
+      console.error("Error during processing:", error);
+      // Don't throw - continue to save whatever we have
     }
   }
 
   // Merge new offers with existing ones
+  // Always save data even if there were errors
   // Create a Set of existing offer keys to avoid duplicates
   const existingOfferKeys = new Set(
     existingOffers.map(
@@ -290,21 +303,30 @@ export async function run(): Promise<{
 
   const { outputPath, metadataPath } = getOutputPaths();
 
-  // Ensure the directory exists (skip check for /tmp in Vercel)
-  if (!outputPath.startsWith("/tmp")) {
-    const outputDir = join(outputPath, "..");
-    if (!existsSync(outputDir)) {
-      throw new Error(`Output directory does not exist: ${outputDir}`);
+  // Save data - always try to save even if there were errors
+  try {
+    // Ensure the directory exists (skip check for /tmp in Vercel)
+    if (!outputPath.startsWith("/tmp")) {
+      const outputDir = dirname(outputPath);
+      if (!existsSync(outputDir)) {
+        console.log(`Creating directory: ${outputDir}`);
+        await mkdir(outputDir, { recursive: true });
+      }
     }
-  }
 
-  // Save offers to local file
-  await writeFile(outputPath, JSON.stringify(allOffers, null, 2));
+    // Save offers to local file
+    await writeFile(outputPath, JSON.stringify(allOffers, null, 2));
+    console.log(`✅ Saved ${allOffers.length} offers to ${outputPath}`);
+  } catch (saveError) {
+    console.error(`❌ Failed to save to ${outputPath}:`, saveError);
+    // Still try to save to Gist as backup
+  }
 
   // Also save to Gist if configured
   if (process.env.GIST_ID && process.env.GITHUB_TOKEN) {
     try {
-      await fetch(`https://api.github.com/gists/${process.env.GIST_ID}`, {
+      console.log(`Saving ${allOffers.length} offers to Gist ${process.env.GIST_ID}...`);
+      const response = await fetch(`https://api.github.com/gists/${process.env.GIST_ID}`, {
         method: "PATCH",
         headers: {
           Authorization: `token ${process.env.GITHUB_TOKEN}`,
@@ -319,10 +341,19 @@ export async function run(): Promise<{
           },
         }),
       });
-      console.log("Data saved to GitHub Gist");
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`GitHub API error: ${response.status} - ${errorText}`);
+      }
+
+      console.log(`✅ Successfully saved ${allOffers.length} offers to GitHub Gist`);
     } catch (error) {
-      console.warn("Failed to save to Gist (non-fatal):", error);
+      console.error("❌ Failed to save to Gist:", error);
+      // Don't throw - allow the function to complete even if Gist save fails
     }
+  } else {
+    console.log("⚠️  GIST_ID or GITHUB_TOKEN not set, skipping Gist save");
   }
 
   // Save metadata (last post ID and fetch time) to local file
@@ -332,7 +363,18 @@ export async function run(): Promise<{
       lastFetchTime: Date.now(),
       totalOffers: allOffers.length,
     };
-    await writeFile(metadataPath, JSON.stringify(metadata, null, 2));
+    try {
+      // Ensure metadata directory exists
+      if (!metadataPath.startsWith("/tmp")) {
+        const metadataDir = dirname(metadataPath);
+        if (!existsSync(metadataDir)) {
+          await mkdir(metadataDir, { recursive: true });
+        }
+      }
+      await writeFile(metadataPath, JSON.stringify(metadata, null, 2));
+    } catch (error) {
+      console.warn("Failed to save metadata file (non-fatal):", error);
+    }
 
     // Also save metadata to Gist if configured
     if (process.env.GIST_ID && process.env.GITHUB_TOKEN) {

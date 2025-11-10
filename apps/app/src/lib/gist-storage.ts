@@ -5,23 +5,40 @@ const GIST_ID = process.env.GIST_ID;
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 
 export async function readFromGist(): Promise<any[]> {
-  if (!GIST_ID || !GITHUB_TOKEN) {
-    console.warn("GIST_ID or GITHUB_TOKEN not set, returning empty array");
+  if (!GIST_ID) {
+    console.warn("GIST_ID not set, returning empty array");
     return [];
   }
 
   try {
+    // Use raw URL for public Gists (no auth needed)
+    // Format: https://gist.githubusercontent.com/{username}/{gist_id}/raw/{filename}
+    // But we can use a simpler approach - get the raw file directly
+    const rawUrl = `https://gist.githubusercontent.com/raw/${GIST_ID}/parsed_comps.json`;
+    
+    // Alternative: Use the API with a simpler approach
+    // For public gists, we can use: https://api.github.com/gists/{gist_id}
     const response = await fetch(
       `https://api.github.com/gists/${GIST_ID}`,
       {
         headers: {
-          Authorization: `token ${GITHUB_TOKEN}`,
           Accept: "application/vnd.github.v3+json",
+          // No auth needed for public gists
         },
       },
     );
 
     if (!response.ok) {
+      // If API fails, try raw URL
+      try {
+        const rawResponse = await fetch(rawUrl);
+        if (rawResponse.ok) {
+          const content = await rawResponse.text();
+          return JSON.parse(content);
+        }
+      } catch {
+        // Ignore raw URL errors
+      }
       throw new Error(`GitHub API error: ${response.status}`);
     }
 
