@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "path";
+import Link from "next/link";
 import { AnimatedText } from "@v1/ui/animated-text";
 import {
   Tooltip,
@@ -68,12 +69,16 @@ export default async function DashboardPage() {
       <div className="pointer-events-none absolute inset-x-0 top-0 h-full bg-gradient-to-t from-background to-transparent -z-10" />
 
       <div className="relative z-10 mx-auto flex w-full max-w-7xl flex-col items-center gap-4 px-4 pb-8 pt-12">
-        <h1 className="font-departure text-center text-3xl md:text-4xl lg:text-5xl leading-tight">
-          <AnimatedText text="Compensation Insights" />
+        <h1 className="font-departure text-center text-2xl md:text-3xl lg:text-4xl leading-tight">
+          <AnimatedText text="Market Insights" />
         </h1>
-        <p className="text-center text-sm md:text-base text-muted-foreground/80">
-          Based on {data.length} offers from LeetCode discussions
-        </p>
+        
+        <Link
+          href="/market"
+          className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        >
+          Browse All Offers
+        </Link>
 
         <DashboardClient initialData={data} />
 
