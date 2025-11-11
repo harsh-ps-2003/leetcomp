@@ -19,18 +19,32 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Handle root and locale-only paths - redirect to dashboard
-  if (pathname === "/" || pathname === "/en" || pathname === "/fr") {
+  // Redirect /en/* routes to remove /en prefix
+  if (pathname.startsWith("/en/")) {
     const url = request.nextUrl.clone();
-    url.pathname = "/en/dashboard";
+    url.pathname = pathname.replace("/en", "");
     return NextResponse.redirect(url);
   }
 
-  // Redirect /dashboard to /en/dashboard
-  if (pathname === "/dashboard") {
+  // Redirect /fr/* routes to /en/* (or just remove locale)
+  if (pathname.startsWith("/fr/")) {
     const url = request.nextUrl.clone();
-    url.pathname = "/en/dashboard";
+    url.pathname = pathname.replace("/fr", "");
     return NextResponse.redirect(url);
+  }
+
+  // Handle root - redirect to dashboard
+  if (pathname === "/" || pathname === "/en" || pathname === "/fr") {
+    const url = request.nextUrl.clone();
+    url.pathname = "/dashboard";
+    return NextResponse.redirect(url);
+  }
+
+  // Rewrite routes to include /en internally but keep URL clean
+  if (pathname.startsWith("/dashboard") || pathname.startsWith("/market") || pathname.startsWith("/posts") || pathname.startsWith("/login")) {
+    const url = request.nextUrl.clone();
+    url.pathname = `/en${pathname}`;
+    return NextResponse.rewrite(url);
   }
 
   // Let i18n middleware handle the rest

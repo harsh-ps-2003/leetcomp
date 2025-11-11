@@ -69,7 +69,7 @@ export default async function DashboardPage() {
       <div className="pointer-events-none absolute inset-x-0 top-0 h-full bg-gradient-to-t from-background to-transparent -z-10" />
 
       <div className="relative z-10 mx-auto flex w-full max-w-7xl flex-col items-center gap-4 px-4 pb-8 pt-12">
-        <h1 className="font-departure text-center text-2xl md:text-3xl lg:text-4xl leading-tight">
+        <h1 className="font-departure text-center text-xl md:text-2xl lg:text-3xl leading-tight whitespace-nowrap">
           <AnimatedText text="Market Insights" />
         </h1>
         

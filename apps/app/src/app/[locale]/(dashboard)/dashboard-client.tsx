@@ -309,7 +309,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
           <h3 className="mb-2 text-sm font-semibold">
             Total Compensation Distribution
           </h3>
-          <ResponsiveContainer width="100%" height={180}>
+          <ResponsiveContainer width="100%" height={140}>
             <BarChart
               data={chartData.distributionChart}
               margin={{ top: 5, right: 5, left: 5, bottom: 5 }}
@@ -349,7 +349,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
           <h3 className="mb-2 text-sm font-semibold">
             Total Compensation by Seniority
           </h3>
-          <ResponsiveContainer width="100%" height={180}>
+          <ResponsiveContainer width="100%" height={140}>
             <BarChart
               data={chartData.experienceBoxPlot}
               margin={{ top: 5, right: 5, left: 5, bottom: 5 }}
@@ -402,7 +402,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
           <h3 className="mb-2 text-sm font-semibold">
             Number of Offers by Company
           </h3>
-          <ResponsiveContainer width="100%" height={180}>
+          <ResponsiveContainer width="100%" height={140}>
             <BarChart
               data={chartData.companyCounts}
               layout="vertical"
@@ -452,7 +452,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
             <h3 className="mb-2 text-sm font-semibold">
               Compensation Trends Over Time (Last 12 Months)
             </h3>
-            <ResponsiveContainer width="100%" height={180}>
+            <ResponsiveContainer width="100%" height={140}>
               <LineChart
                 data={chartData.trendChart}
                 margin={{ top: 5, right: 5, left: 5, bottom: 5 }}
