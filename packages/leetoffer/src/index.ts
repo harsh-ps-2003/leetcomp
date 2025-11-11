@@ -161,6 +161,116 @@ async function loadExistingData(): Promise<{
   return { offers: existingOffers, lastPostId, lastFetchTime };
 }
 
+// Helper function to save data (extracted for reuse)
+async function saveData(
+  allOffers: ParsedOffer[],
+  outputPath: string,
+  metadataPath: string,
+  lastFetchedPostId: string | undefined,
+): Promise<void> {
+  // Save data - always try to save even if there were errors
+  try {
+    // Ensure the directory exists (skip check for /tmp in Vercel)
+    if (!outputPath.startsWith("/tmp")) {
+      const outputDir = dirname(outputPath);
+      if (!existsSync(outputDir)) {
+        console.log(`Creating directory: ${outputDir}`);
+        await mkdir(outputDir, { recursive: true });
+      }
+    }
+
+    // Save offers to local file
+    await writeFile(outputPath, JSON.stringify(allOffers, null, 2));
+    console.log(`✅ Saved ${allOffers.length} offers to ${outputPath}`);
+  } catch (saveError) {
+    console.error(`❌ Failed to save to ${outputPath}:`, saveError);
+    // Still try to save to Gist as backup
+  }
+
+  // Also save to Gist if configured
+  if (process.env.GIST_ID && process.env.GITHUB_TOKEN) {
+    try {
+      console.log(`Saving ${allOffers.length} offers to Gist ${process.env.GIST_ID}...`);
+      const response = await fetch(`https://api.github.com/gists/${process.env.GIST_ID}`, {
+        method: "PATCH",
+        headers: {
+          Authorization: `token ${process.env.GITHUB_TOKEN}`,
+          Accept: "application/vnd.github.v3+json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          files: {
+            "parsed_comps.json": {
+              content: JSON.stringify(allOffers, null, 2),
+            },
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`GitHub API error: ${response.status} - ${errorText}`);
+      }
+
+      console.log(`✅ Successfully saved ${allOffers.length} offers to GitHub Gist`);
+    } catch (error) {
+      console.error("❌ Failed to save to Gist:", error);
+      // Don't throw - allow the function to complete even if Gist save fails
+    }
+  } else {
+    console.log("⚠️  GIST_ID or GITHUB_TOKEN not set, skipping Gist save");
+  }
+
+  // Save metadata (last post ID and fetch time) to local file
+  if (lastFetchedPostId) {
+    const metadata = {
+      lastPostId: lastFetchedPostId,
+      lastFetchTime: Date.now(),
+      totalOffers: allOffers.length,
+    };
+    try {
+      // Ensure metadata directory exists
+      if (!metadataPath.startsWith("/tmp")) {
+        const metadataDir = dirname(metadataPath);
+        if (!existsSync(metadataDir)) {
+          await mkdir(metadataDir, { recursive: true });
+        }
+      }
+      await writeFile(metadataPath, JSON.stringify(metadata, null, 2));
+    } catch (error) {
+      console.warn("Failed to save metadata file (non-fatal):", error);
+    }
+
+    // Also save metadata to Gist if configured
+    if (process.env.GIST_ID && process.env.GITHUB_TOKEN) {
+      try {
+        const metadata = {
+          lastPostId: lastFetchedPostId,
+          lastFetchTime: Date.now(),
+          totalOffers: allOffers.length,
+        };
+        await fetch(`https://api.github.com/gists/${process.env.GIST_ID}`, {
+          method: "PATCH",
+          headers: {
+            Authorization: `token ${process.env.GITHUB_TOKEN}`,
+            Accept: "application/vnd.github.v3+json",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            files: {
+              ".leetoffer_metadata.json": {
+                content: JSON.stringify(metadata, null, 2),
+              },
+            },
+          }),
+        });
+      } catch (error) {
+        console.warn("Failed to save metadata to Gist (non-fatal):", error);
+      }
+    }
+  }
+}
+
 export async function run(): Promise<{
   processed: number;
   successful: number;
@@ -192,6 +302,42 @@ export async function run(): Promise<{
   let lastFetchedPostId: string | undefined;
   let apiCallCount = 0;
   const MAX_DAILY_API_CALLS = 240; // Leave some buffer below the 250 limit
+  
+  // Store paths for cleanup on interrupt
+  const { outputPath, metadataPath } = getOutputPaths();
+  
+  // Set up signal handlers to save data on interrupt (Ctrl+C)
+  let shouldSaveOnExit = true;
+  const saveOnExit = async () => {
+    if (!shouldSaveOnExit) return;
+    shouldSaveOnExit = false;
+    console.log("\n\n⚠️  Interrupted! Saving collected data...");
+    
+    try {
+      // Merge whatever we have
+      const existingOfferKeys = new Set(
+        existingOffers.map(
+          (offer) =>
+            `${offer.company}-${offer.role}-${offer.total_offer}-${offer.post_id}`,
+        ),
+      );
+      const uniqueNewOffers = newParsedOffers.filter((offer) => {
+        const key = `${offer.company}-${offer.role}-${offer.total_offer}-${offer.post_id}`;
+        return !existingOfferKeys.has(key);
+      });
+      const allOffers = [...existingOffers, ...uniqueNewOffers];
+      
+      await saveData(allOffers, outputPath, metadataPath, lastFetchedPostId);
+      console.log(`\n✅ Saved ${allOffers.length} offers before exit.`);
+    } catch (error) {
+      console.error("Failed to save on exit:", error);
+    }
+    process.exit(0);
+  };
+  
+  // Handle SIGINT (Ctrl+C) and SIGTERM
+  process.on("SIGINT", saveOnExit);
+  process.on("SIGTERM", saveOnExit);
 
   // Fetch new posts (will stop when it reaches lastPostId if in incremental mode)
   try {
@@ -301,104 +447,11 @@ export async function run(): Promise<{
 
   const allOffers = [...existingOffers, ...uniqueNewOffers];
 
-  const { outputPath, metadataPath } = getOutputPaths();
+  // Disable save-on-exit handler since we're saving normally
+  shouldSaveOnExit = false;
 
-  // Save data - always try to save even if there were errors
-  try {
-    // Ensure the directory exists (skip check for /tmp in Vercel)
-    if (!outputPath.startsWith("/tmp")) {
-      const outputDir = dirname(outputPath);
-      if (!existsSync(outputDir)) {
-        console.log(`Creating directory: ${outputDir}`);
-        await mkdir(outputDir, { recursive: true });
-      }
-    }
-
-    // Save offers to local file
-    await writeFile(outputPath, JSON.stringify(allOffers, null, 2));
-    console.log(`✅ Saved ${allOffers.length} offers to ${outputPath}`);
-  } catch (saveError) {
-    console.error(`❌ Failed to save to ${outputPath}:`, saveError);
-    // Still try to save to Gist as backup
-  }
-
-  // Also save to Gist if configured
-  if (process.env.GIST_ID && process.env.GITHUB_TOKEN) {
-    try {
-      console.log(`Saving ${allOffers.length} offers to Gist ${process.env.GIST_ID}...`);
-      const response = await fetch(`https://api.github.com/gists/${process.env.GIST_ID}`, {
-        method: "PATCH",
-        headers: {
-          Authorization: `token ${process.env.GITHUB_TOKEN}`,
-          Accept: "application/vnd.github.v3+json",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          files: {
-            "parsed_comps.json": {
-              content: JSON.stringify(allOffers, null, 2),
-            },
-          },
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`GitHub API error: ${response.status} - ${errorText}`);
-      }
-
-      console.log(`✅ Successfully saved ${allOffers.length} offers to GitHub Gist`);
-    } catch (error) {
-      console.error("❌ Failed to save to Gist:", error);
-      // Don't throw - allow the function to complete even if Gist save fails
-    }
-  } else {
-    console.log("⚠️  GIST_ID or GITHUB_TOKEN not set, skipping Gist save");
-  }
-
-  // Save metadata (last post ID and fetch time) to local file
-  if (lastFetchedPostId) {
-    const metadata = {
-      lastPostId: lastFetchedPostId,
-      lastFetchTime: Date.now(),
-      totalOffers: allOffers.length,
-    };
-    try {
-      // Ensure metadata directory exists
-      if (!metadataPath.startsWith("/tmp")) {
-        const metadataDir = dirname(metadataPath);
-        if (!existsSync(metadataDir)) {
-          await mkdir(metadataDir, { recursive: true });
-        }
-      }
-      await writeFile(metadataPath, JSON.stringify(metadata, null, 2));
-    } catch (error) {
-      console.warn("Failed to save metadata file (non-fatal):", error);
-    }
-
-    // Also save metadata to Gist if configured
-    if (process.env.GIST_ID && process.env.GITHUB_TOKEN) {
-      try {
-        await fetch(`https://api.github.com/gists/${process.env.GIST_ID}`, {
-          method: "PATCH",
-          headers: {
-            Authorization: `token ${process.env.GITHUB_TOKEN}`,
-            Accept: "application/vnd.github.v3+json",
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            files: {
-              ".leetoffer_metadata.json": {
-                content: JSON.stringify(metadata, null, 2),
-              },
-            },
-          }),
-        });
-      } catch (error) {
-        console.warn("Failed to save metadata to Gist (non-fatal):", error);
-      }
-    }
-  }
+  // Save data using the helper function
+  await saveData(allOffers, outputPath, metadataPath, lastFetchedPostId);
 
   console.log(`\n✅ Done!`);
   console.log(`   Processed: ${processedCount} new posts`);
