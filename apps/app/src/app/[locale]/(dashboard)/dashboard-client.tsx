@@ -4,8 +4,6 @@ import { useMemo } from "react";
 import {
   BarChart,
   Bar,
-  LineChart,
-  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -240,37 +238,10 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
       .sort((a, b) => b.count - a.count)
       .slice(0, 10);
 
-    // 4. Compensation Trends Over Time (Monthly)
-    const monthlyData: Record<string, number[]> = {};
-    offersWithTotal.forEach((offer) => {
-      if (offer.post_date) {
-        const monthKey = offer.post_date.substring(0, 7);
-        const totalLPA = (offer.total_offer || 0) / 100000;
-        if (!monthlyData[monthKey]) {
-          monthlyData[monthKey] = [];
-        }
-        monthlyData[monthKey].push(totalLPA);
-      }
-    });
-
-    const trendChart = Object.entries(monthlyData)
-      .map(([month, values]) => {
-        const stats = calculateStats(values);
-        return {
-          month,
-          median: stats?.median || 0,
-          mean: stats?.mean || 0,
-          count: values.length,
-        };
-      })
-      .sort((a, b) => a.month.localeCompare(b.month))
-      .slice(-12);
-
     return {
       distributionChart,
       experienceBoxPlot,
       companyCounts,
-      trendChart,
       newestDate:
         dates.length > 0 && dates[0] !== undefined
           ? new Date(dates[0]).toISOString().split("T")[0]
@@ -446,93 +417,6 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
           </ResponsiveContainer>
         </div>
 
-        {/* Compensation Trends Over Time */}
-        {chartData.trendChart.length > 0 && (
-          <div className="rounded-xl border border-border/60 bg-background/40 backdrop-blur-sm p-3 md:col-span-2 lg:col-span-3">
-            <h3 className="mb-2 text-sm font-semibold">
-              Compensation Trends Over Time (Last 12 Months)
-            </h3>
-            <ResponsiveContainer width="100%" height={140}>
-              <LineChart
-                data={chartData.trendChart}
-                margin={{ top: 5, right: 5, left: 5, bottom: 5 }}
-              >
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  stroke="hsl(var(--border))"
-                />
-                <XAxis
-                  dataKey="month"
-                  stroke="hsl(var(--muted-foreground))"
-                  fontSize={12}
-                  angle={-45}
-                  textAnchor="end"
-                  height={80}
-                  tickFormatter={(value) => {
-                    const date = new Date(value + "-01");
-                    return date.toLocaleDateString("en-US", {
-                      month: "short",
-                      year: "numeric",
-                    });
-                  }}
-                />
-                <YAxis
-                  stroke="hsl(var(--muted-foreground))"
-                  fontSize={12}
-                  label={{
-                    value: "Total Compensation (₹ LPA)",
-                    angle: -90,
-                    position: "insideLeft",
-                  }}
-                />
-                <RechartsTooltip
-                  contentStyle={{
-                    backgroundColor: "transparent",
-                    border: "none",
-                    boxShadow: "none",
-                  }}
-                  cursor={{
-                    stroke: "hsl(var(--border))",
-                    strokeWidth: 1,
-                    strokeDasharray: "3 3",
-                  }}
-                  formatter={(value: any, name: string) => {
-                    if (name === "median") {
-                      return [`₹${value.toFixed(2)}L`, "Median"];
-                    }
-                    if (name === "mean") {
-                      return [`₹${value.toFixed(2)}L`, "Mean"];
-                    }
-                    return value;
-                  }}
-                  labelFormatter={(value) => {
-                    const date = new Date(value + "-01");
-                    return date.toLocaleDateString("en-US", {
-                      month: "long",
-                      year: "numeric",
-                    });
-                  }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="median"
-                  stroke={COLORS.primary}
-                  strokeWidth={2}
-                  dot={{ fill: COLORS.primary, r: 4 }}
-                  name="Median"
-                />
-                <Line
-                  type="monotone"
-                  dataKey="mean"
-                  stroke={COLORS.secondary}
-                  strokeWidth={2}
-                  dot={{ fill: COLORS.secondary, r: 4 }}
-                  name="Mean"
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        )}
       </div>
     </div>
   );
